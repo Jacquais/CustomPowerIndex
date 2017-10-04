@@ -3,10 +3,10 @@ import time
 import sys
 import os.path
 import platform
-import py2app
 from colorama import init
 from termcolor import colored
 import json
+import decimal
 init()
 
 
@@ -43,6 +43,7 @@ try:
 
 
     def NFL():
+
 
         def fetch(week):
             print("Fetching data from week {}".format(week))
@@ -209,25 +210,41 @@ try:
             print()
 
         def fetchAll(year):
-            for week in range(0, 18):
-                results = {}
-                year = str(year)
-                print(year)
-                print("Fetching data from week {} of {}".format(week, year))
+            results = []
+            year = str(year)
+            week1 = 0
+            # Fetch Year Schedule
+            try:
+                schedule = requests.get(
+                    'http://api.sportradar.us/nfl-ot2/games/{}/REG/schedule.json?api_key=cm5dvxyr3h45c5f6tptay9fy'.format(year))
+                schedule = schedule.json()
+            except json.JSONDecodeError:
                 try:
                     schedule = requests.get(
-                        'http://api.sportradar.us/nfl-ot2/games/{}/REG/schedule.json?api_key=cm5dvxyr3h45c5f6tptay9fy'.format(year))
+                        'http://api.sportradar.us/nfl-ot2/games/{}/REG/schedule.json?api_key=zhh28pc4kwnrexp3tcarsn6c'.format(
+                            year))
                     schedule = schedule.json()
-                    GamesCount = len(schedule["weeks"][week]["games"])
                 except json.JSONDecodeError:
                     print(
-                        colored("the cunts took my key.\nTell me and ill fix it.\nThis script is unusable without the key.",
+                        colored("the cunts took my key.\nDumping results so far.",
                                 "red"))
-                    Quit()
+                    print("Results to week {} of {}".format(week1, year))
+
+                    resultspct = decimal.Decimal((results.count(1) / len(results)) * 100)
+                    if resultspct:
+                        print(round(resultspct, 2) + "%")
+                    else:
+                        print("No results to print.")
+                        Quit()
+
+            # Get Weeks games
+            for week in range(0, 18):
+                errors = 0
+                week1 += 1
+                GamesCount = len(schedule["weeks"][week]["games"])
                 games = -1
                 teams = {}
-
-                print("Getting Data and Calculating\n")
+                # calculate for each game
                 for y in range(GamesCount):
                     games += 1
                     homenamekey = 'HomeName' + str(games)
@@ -243,14 +260,39 @@ try:
                         "id"]  # Game ID (For use in displaying game results)
 
                     # CALCULATE
-                    time.sleep(1)
-                    HomeCall = requests.get("http://api.sportradar.us/nfl-ot2/seasontd/" + year + "/REG/teams/" + teams[homeidkey] + "/statistics.json?api_key=cm5dvxyr3h45c5f6tptay9fy")
-                    print(HomeCall)
-                    HomeCall = HomeCall.json()
+                    try:
+                        time.sleep(1)
+                        HomeCall = requests.get("http://api.sportradar.us/nfl-ot2/seasontd/" + year + "/REG/teams/" + teams[homeidkey] + "/statistics.json?api_key=cm5dvxyr3h45c5f6tptay9fy")
+                        HomeCall = HomeCall.json()
+                        time.sleep(1)
+                        AwayCall = requests.get("http://api.sportradar.us/nfl-ot2/seasontd/" + year + "/REG/teams/" + teams[
+                            awayidkey] + "/statistics.json?api_key=cm5dvxyr3h45c5f6tptay9fy")
+                        AwayCall = AwayCall.json()
+                    except json.JSONDecodeError:
 
-                    time.sleep(1)
-                    AwayCall = requests.get("http://api.sportradar.us/nfl-ot2/seasontd/" + year + "/REG/teams/" + teams[awayidkey] + "/statistics.json?api_key=cm5dvxyr3h45c5f6tptay9fy")
-                    AwayCall = AwayCall.json()
+                        try:
+                            time.sleep(1)
+                            HomeCall = requests.get(
+                                "http://api.sportradar.us/nfl-ot2/seasontd/" + year + "/REG/teams/" + teams[
+                                    homeidkey] + "/statistics.json?api_key=zhh28pc4kwnrexp3tcarsn6c")
+                            HomeCall = HomeCall.json()
+                            time.sleep(1)
+                            AwayCall = requests.get(
+                                "http://api.sportradar.us/nfl-ot2/seasontd/" + year + "/REG/teams/" + teams[
+                                    awayidkey] + "/statistics.json?api_key=zhh28pc4kwnrexp3tcarsn6c")
+                            AwayCall = AwayCall.json()
+                        except json.JSONDecodeError:
+                            print(
+                                colored(
+                                    "the cunts took my key.\nDumping results so far.","red"))
+                            print("Results to week {} of {}".format(week1, year))
+
+                            resultspct = decimal.Decimal((results.count(1) / len(results)) * 100)
+                            if resultspct:
+                                print(round(resultspct, 2) + "%")
+                            else:
+                                print("No results to print.")
+                            Quit()
 
                     hometouchdowns = HomeCall["record"]["touchdowns"]["total"]
                     hometouchdownspergame = hometouchdowns / HomeCall["record"]["games_played"]
@@ -367,49 +409,55 @@ try:
                         ((awaypassyardspergame + awayopponentpassyardspergame) / 285)
                     )
                     # print(HomeScore, " ", AwayScore) Verbose Mode?
-                    errors = 0
-                    if errors >= 5:
-                        return
-                    if HomeScore > AwayScore:
-                        print("The " + teams[homenamekey] + " will beat the " + teams[awaynamekey], end='')
 
+                    #1 = Correct
+                    #0 = Incorrect
+                    print("Errors: {}. Week: {}. Game {}. Year {}.".format(errors, week, y, year))
+                    if errors >= 5:
+                        cont = input("More then 5 errors in a week, this most likely means that this week has not been played. Continue?")
+                        print("[1]Yes"
+                              "[2]No")
+                        if cont == "2":
+                            resultspct = decimal.Decimal((results.count(1) / len(results)) * 100)
+                            print(colored("Results: {}% correct.\n".format(round(resultspct, 2), "green")))
+                    if HomeScore > AwayScore:
                         try:
                             if schedule["weeks"][week]["games"][games]["scoring"]["home_points"] > \
                                     schedule["weeks"][week]["games"][games]["scoring"]["away_points"]:
-                                results[week + y] = True
+                                results.extend([1])
                             elif schedule["weeks"][week]["games"][games]["scoring"]["home_points"] <= \
                                     schedule["weeks"][week]["games"][games]["scoring"]["away_points"]:
-                                results[week + y] = False
+                                results.extend([0])
                         except KeyError:
+                            print(colored("ERROR", "red"))
                             errors += 1
 
                     elif HomeScore < AwayScore:
-                        print("The " + teams[homenamekey] + " will lose to the " + teams[awaynamekey], end='')
-
                         try:
                             if schedule["weeks"][week]["games"][games]["scoring"]["home_points"] < \
                                     schedule["weeks"][week]["games"][games]["scoring"]["away_points"]:
-                                results[week + y] = True
+                                results.extend([1])
                             elif schedule["weeks"][week]["games"][games]["scoring"]["home_points"] >= \
                                     schedule["weeks"][week]["games"][games]["scoring"]["away_points"]:
-                                results[week + y] = False
+                                results.extend([0])
 
                         except KeyError:
+                            print(colored("ERROR", "red"))
                             errors += 1
 
                     else:
-                        print("The " + teams[homenamekey] + " will tie the " + teams[awaynamekey], end='')
-
                         try:
                             if schedule["weeks"][week]["games"][games]["scoring"]["home_points"] == \
                                     schedule["weeks"][week]["games"][games]["scoring"]["away_points"]:
-                                results[week + y] = True
+                                results.extend([1])
                             elif schedule["weeks"][week]["games"][games]["scoring"]["home_points"] != \
                                     schedule["weeks"][week]["games"][games]["scoring"]["away_points"]:
-                                results[week + y] = False
+                                results.extend([0])
                         except KeyError:
+                            print(colored("ERROR", "red"))
                             errors += 1
-                print(results)
+                resultspct = decimal.Decimal((results.count(1)/len(results))*100)
+                print(colored("Results: {}% correct.\n".format(round(resultspct, 2)), "green"))
 
         while True:
             Choice = input(
@@ -483,8 +531,7 @@ try:
                         print("That is not a valid week- There are 17 weeks in the NFL Regular season.\n")
                         continue
             elif Choice == "3":
-                for x in range(2017, 2018):
-                    print(1)
+                for x in range(2000, 2018):
                     fetchAll(x)
             elif Choice == "99":
                 break
